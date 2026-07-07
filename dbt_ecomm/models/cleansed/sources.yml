@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw Northwind data loaded from S3 into Snowflake by the extract pipeline."
+    database: ecomm_dw
+    schema: raw
+    tables:
+      - name: categories
+      - name: customers
+      - name: employees
+      - name: order_details
+      - name: orders
+      - name: products
+      - name: regions
+      - name: shippers
+      - name: suppliers
+      - name: territories

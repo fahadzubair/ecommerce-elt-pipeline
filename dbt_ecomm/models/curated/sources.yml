@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: cleansed
+    description: "Cleansed source"
+    database: ecomm_dw
+    schema: cleansed
+    tables:
+      - name: categories
+      - name: customers
+      - name: employees
+      - name: order_details
+      - name: orders
+      - name: products
+      - name: regions
+      - name: shippers
+      - name: suppliers
+      - name: territories
