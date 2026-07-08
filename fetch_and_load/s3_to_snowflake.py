@@ -6,7 +6,7 @@ import pandas as pd
 from snowflake.connector import connect
 from snowflake.connector.pandas_tools import write_pandas
 
-BUCKET = os.getenv("S3_RAW_BUCKET")
+BUCKET = os.environ["S3_RAW_BUCKET"]  # required; raises KeyError if not set
 
 
 def put():
@@ -27,15 +27,15 @@ def put():
     keys.sort(reverse=True)
     latest_keys = keys[:10]
 
-    # Connect to Snowflake (password comes from the SNOWFLAKE_PASSWORD env var)
+    # Connect to Snowflake — all settings come from the .env / environment
     conn = connect(
-        account="CNSFQSU-VL97973",
-        user="FAHADZUBAIR",
-        password=os.getenv("SNOWFLAKE_PASSWORD"),
-        role="ACCOUNTADMIN",
-        warehouse="ecomm_dw",
-        database="ecomm_dw",
-        schema="raw",
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        password=os.environ["SNOWFLAKE_PASSWORD"],
+        role=os.environ["SNOWFLAKE_ROLE"],
+        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+        database=os.environ["SNOWFLAKE_DATABASE"],
+        schema=os.environ["SNOWFLAKE_SCHEMA"],
     )
 
     # Load each JSON file into its own table in ecomm_dw.raw

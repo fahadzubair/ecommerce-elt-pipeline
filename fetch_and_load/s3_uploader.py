@@ -4,7 +4,7 @@ from datetime import datetime
 
 import boto3
 
-BUCKET = os.getenv("S3_RAW_BUCKET")  # reads the S3_RAW_BUCKET environment variable
+BUCKET = os.environ["S3_RAW_BUCKET"]  # required; raises KeyError if not set
 
 
 def upload_to_s3(datasets):

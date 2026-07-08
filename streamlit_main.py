@@ -8,9 +8,10 @@ from dotenv import load_dotenv
 from snowflake.connector import connect
 
 from dbt.cli.main import dbtRunner
-from fetch_and_load import api_call, s3_uploader, s3_to_snowflake
 
-load_dotenv()  # load AWS + Snowflake credentials from .env into os.environ
+load_dotenv()  # must run BEFORE the fetch_and_load import (those modules read env at import time)
+
+from fetch_and_load import api_call, s3_uploader, s3_to_snowflake  # noqa: E402
 
 # Worker threads (dbt / snowflake) print while stdout is redirected to the UI,
 # which makes Streamlit warn "missing ScriptRunContext". Silence that logger...
@@ -48,12 +49,12 @@ st.title("🛒 Ecommerce ELT Pipeline")
 @st.cache_resource
 def get_connection():
     return connect(
-        account="CNSFQSU-VL97973",
-        user="FAHADZUBAIR",
-        password=os.getenv("SNOWFLAKE_PASSWORD"),
-        role="ACCOUNTADMIN",
-        warehouse="ecomm_dw",
-        database="ecomm_dw",
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        password=os.environ["SNOWFLAKE_PASSWORD"],
+        role=os.environ["SNOWFLAKE_ROLE"],
+        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+        database=os.environ["SNOWFLAKE_DATABASE"],
     )
 
 
@@ -154,9 +155,12 @@ st.header("Data")
 
 schema = st.selectbox("Layer", ["RAW", "CLEANSED", "CURATED"])
 
+# Database name comes from the environment (same var the connection uses)
+DATABASE = os.environ["SNOWFLAKE_DATABASE"]
+
 try:
     tables = run_query(
-        "select table_name from ecomm_dw.information_schema.tables "
+        f"select table_name from {DATABASE}.information_schema.tables "
         f"where table_schema = '{schema}' order by table_name"
     )
 
@@ -164,9 +168,9 @@ try:
         st.info(f"No tables in {schema} yet - run the pipeline steps above first.")
     else:
         table = st.selectbox("Table", tables["TABLE_NAME"])
-        st.caption(f"Showing up to 100 rows from ECOMM_DW.{schema}.{table}")
+        st.caption(f"Showing up to 100 rows from {DATABASE.upper()}.{schema}.{table}")
         st.dataframe(
-            run_query(f"select * from ECOMM_DW.{schema}.{table} limit 100"),
+            run_query(f"select * from {DATABASE}.{schema}.{table} limit 100"),
             use_container_width=True,
         )
 except Exception as e:
