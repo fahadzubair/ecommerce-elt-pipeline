@@ -2,3 +2,10 @@ elt_venv
 .env
 __pycache__/
 *.pyc
+
+# dbt build artifacts
+dbt_ecomm/target/
+dbt_ecomm/dbt_packages/
+logs/
+dbt_ecomm/logs/
+*.log
