@@ -18,16 +18,20 @@ def api_caller():
     """Fetch every endpoint and return {table_name: parsed_json}. No local files."""
     datasets = {}
 
-    for endpoint in API_ENDPOINTS:
+    for i, endpoint in enumerate(API_ENDPOINTS, start=1):
+
+        # Increase the record cap by 100 for each call, starting at 100.
+        limit = i * 100
 
         # GET request
-        response = requests.get(endpoint)
+        response = requests.get(endpoint, params={"$top": limit})
+        response.raise_for_status()
         data = response.json()
 
         name = endpoint.split('/')[-1].lower()
         datasets[name] = data
 
-        print(f"Fetched {len(data.get('value', []))} rows from {name} endpoint")
+        print(f"Fetched {len(data.get('value', []))} rows from {name} endpoint (limit={limit})")
 
     return datasets
 

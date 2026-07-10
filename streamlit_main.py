@@ -3,6 +3,7 @@ import io
 import logging
 import os
 
+import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from snowflake.connector import connect
@@ -65,6 +66,22 @@ def run_query(sql):
         return cur.fetch_pandas_all()
     finally:
         cur.close()
+
+
+@st.cache_data(ttl=300)
+def load_df(sql):
+    """Cached query loader so metric charts don't re-hit Snowflake on every rerun."""
+    return run_query(sql)
+
+
+def load_curated(sql, columns):
+    """Run a curated query; return an empty DataFrame(columns) when the data isn't there
+    yet (schema/table missing or nothing loaded) so charts render empty instead of erroring."""
+    try:
+        df = load_df(sql)
+    except Exception:  # noqa: BLE001 - missing schema/table => treat as no data
+        return pd.DataFrame(columns=columns)
+    return df if not df.empty else pd.DataFrame(columns=columns)
 
 
 LOG_HEIGHT = 180  # px height of the scrollable log box
@@ -146,6 +163,117 @@ elif clicked_dbt:
             st.success("dbt run succeeded")
         else:
             st.error("dbt run failed - see messages above / terminal")
+
+
+# ------------------------------------------------------------------
+# Metrics (curated data)
+# ------------------------------------------------------------------
+st.header("📊 Metrics")
+
+# Database name comes from the environment (same var the connection uses)
+DATABASE = os.environ["SNOWFLAKE_DATABASE"]
+CURATED = f"{DATABASE}.CURATED"
+
+# --- KPI row: one aggregate scan over the fact table ---
+kpis = load_curated(
+    f"""
+    select
+        sum(net_amount)            as revenue,
+        count(distinct order_id)   as orders,
+        sum(quantity)              as units,
+        avg(net_amount)            as avg_line
+    from {CURATED}.FCT_ORDERS
+    """,
+    ["REVENUE", "ORDERS", "UNITS", "AVG_LINE"],
+)
+
+# When the table exists but is empty, the aggregate returns one row of NULLs.
+has_data = not kpis.empty and kpis["REVENUE"].iloc[0] is not None
+if not has_data:
+    st.caption("No curated data yet - run the pipeline steps above to populate these charts.")
+
+revenue = float(kpis["REVENUE"].iloc[0]) if has_data else 0.0
+orders = int(kpis["ORDERS"].iloc[0]) if has_data else 0
+units = int(kpis["UNITS"].iloc[0]) if has_data else 0
+aov = revenue / orders if orders else 0.0
+
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Total Revenue", f"${revenue:,.0f}")
+k2.metric("Total Orders", f"{orders:,}")
+k3.metric("Units Sold", f"{units:,}")
+k4.metric("Avg Order Value", f"${aov:,.2f}")
+
+# --- Charts: 2x2 grid (render empty frames when there is no data) ---
+r1c1, r1c2 = st.columns(2)
+
+with r1c1:
+    st.subheader("Revenue over time")
+    trend = load_curated(
+        f"""
+        select
+            date_trunc('month', order_date) as month,
+            sum(net_amount)                 as revenue
+        from {CURATED}.FCT_ORDERS
+        where order_date is not null
+        group by 1
+        order by 1
+        """,
+        ["MONTH", "REVENUE"],
+    )
+    st.line_chart(trend, x="MONTH", y="REVENUE")
+
+with r1c2:
+    st.subheader("Revenue by category")
+    by_cat = load_curated(
+        f"""
+        select
+            c.category_name  as category_name,
+            sum(f.net_amount) as revenue
+        from {CURATED}.FCT_ORDERS f
+        join {CURATED}.DIM_PRODUCTS p   on f.product_id = p.product_id
+        join {CURATED}.DIM_CATEGORIES c on p.category_id = c.category_id
+        group by 1
+        order by revenue desc
+        """,
+        ["CATEGORY_NAME", "REVENUE"],
+    )
+    st.bar_chart(by_cat, x="CATEGORY_NAME", y="REVENUE")
+
+r2c1, r2c2 = st.columns(2)
+
+with r2c1:
+    st.subheader("Top 10 products by revenue")
+    top_prod = load_curated(
+        f"""
+        select
+            p.product_name   as product_name,
+            sum(f.net_amount) as revenue
+        from {CURATED}.FCT_ORDERS f
+        join {CURATED}.DIM_PRODUCTS p on f.product_id = p.product_id
+        group by 1
+        order by revenue desc
+        limit 10
+        """,
+        ["PRODUCT_NAME", "REVENUE"],
+    )
+    st.bar_chart(top_prod, x="PRODUCT_NAME", y="REVENUE", horizontal=True)
+
+with r2c2:
+    st.subheader("Top 10 customers by revenue")
+    top_cust = load_curated(
+        f"""
+        select
+            cu.company_name  as company_name,
+            sum(f.net_amount) as revenue
+        from {CURATED}.FCT_ORDERS f
+        join {CURATED}.DIM_CUSTOMERS cu on f.customer_id = cu.customer_id
+        group by 1
+        order by revenue desc
+        limit 10
+        """,
+        ["COMPANY_NAME", "REVENUE"],
+    )
+    st.bar_chart(top_cust, x="COMPANY_NAME", y="REVENUE", horizontal=True)
 
 
 # ------------------------------------------------------------------
